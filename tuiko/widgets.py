@@ -465,8 +465,8 @@ def status(msg, *, prefix=None, out=None):
     prefix = ui.star
   prefix = prefix.strip()
   if prefix:
-    p = bg(theme.dim_bg, style(f" {prefix} ", 1, theme.accent_bright))
-    out.write("  " + p + " " + style(msg, theme.text) + "\n")
+    p = style(prefix + " ", 1, theme.accent_bright)
+    out.write("  " + p + style(msg, theme.text) + "\n")
   else:
     out.write("  " + style(msg, theme.text) + "\n")
   out.flush()
