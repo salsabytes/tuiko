@@ -32,6 +32,7 @@ class theme:
   muted = 245
   faint = 239
   success = 114
+  highlight = 226
   select_fg = 213
   key_bg = 237
   key_fg = 255
@@ -64,6 +65,9 @@ class ui:
   pct = "%"
   hint_select = "[↑/↓] Gerak · [ENTER] Pilih · [ESC] Batal"
   hint_multiselect = "[↑/↓] Gerak · [SPACE] Tandai · [ENTER] Lanjut · [ESC] Batal"
+  search_mark = "⌕"
+  search_ph = "Ketik untuk cari…"
+  search_n = "cocok"
 
 
 def style(text, *codes):

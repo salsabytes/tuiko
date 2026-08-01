@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tuiko"
 version = "0.2.0"
-description = "mikro-framework TUI Python stdlib-only (nol dependency pihak ketiga)"
+description = "mikro-framework TUI Python stdlib-only"
 requires-python = ">=3.10"
 dependencies = []
 

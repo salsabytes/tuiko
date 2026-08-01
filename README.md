@@ -15,6 +15,9 @@ dependencies. It renders with ANSI escape codes and reads input via `msvcrt`
 - `prompt` — single-line text input
 - `select` — pick one item, with digit jump (`0-9`)
 - `multiselect` — pick many items at once (checkboxes)
+- Realtime search (`search=True`) — type to filter the list live with the
+  matching text highlighted, Inquirer-style: just type and pick;
+  `fuzzy=True` matches letters in sequence (e.g. `sxk` finds "Spy x Family")
 - `progress` — progress bar (percentage) + spinner
 - `status` — one-line notice
 - `session` — full-screen mode (alt screen + raw input)
@@ -35,7 +38,7 @@ from tuiko import prompt, select, session
 
 with session():
     name = prompt("What's your name?", hint="[ESC] quit")
-    choice = select("Pick:", ["One", "Two"])
+    choice = select("Pick:", ["One", "Two"], search=True, fuzzy=True)
 ```
 
 ## Customization

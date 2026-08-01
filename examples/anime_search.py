@@ -10,7 +10,6 @@ from tuiko import (
   grad,
   multiselect,
   progress,
-  prompt,
   select,
   session,
   status,
@@ -63,17 +62,12 @@ def _episodes(title):
   return [f"EP{i:02d} — {title}" for i in range(1, n + 1)]
 
 def run_flow(key_source=None, out=None, sleep=SLEEP):
-  q = prompt("Cari anime:", hint="[ESC] keluar", key_source=key_source, out=out, header=_banner())
-  if q is None:
-    return "quit", None
-  hits = _search(q)
-  if not hits:
-    return "none", None
-  t = select("Pilih judul:", hits, key_source=key_source, out=out, header=_banner())
+  titles = [t for t, _ in _CATALOG]
+  t = select("Cari anime:", titles, search=True, fuzzy=True, key_source=key_source, out=out, header=_banner())
   if t is None:
     return "quit", None
-  title = hits[t]
-  picks = multiselect(f"Tandai episode ({title}):", _episodes(title),
+  title = titles[t]
+  picks = multiselect(f"Tandai episode ({title}):", _episodes(title), search=True,
                       key_source=key_source, out=out, header=_banner())
   if picks is None:
     return "quit", None
@@ -95,8 +89,6 @@ def main():
       result, data = run_flow()
       if result == "quit":
         status("Sayonara ~ ✦")
-      elif result == "none":
-        status("Gak ketemu. Coba judul lain!")
       elif result == "empty":
         status("Gak ada episode yang dipilih.")
       else:

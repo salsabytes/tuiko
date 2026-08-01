@@ -3,7 +3,7 @@
 import time
 
 from .core import grad, style, theme, ui
-from .widgets import multiselect, progress, prompt, select, session, status
+from .widgets import multiselect, progress, select, session, status
 
 SLEEP = 0.05
 
@@ -20,13 +20,6 @@ _CATALOG = [
   ("Bakso Urat", 3), ("Pempek Palembang", 2),
 ]
 
-def _search(q):
-
-  q = q.strip().lower()
-  if not q:
-    return []
-  return [t for t, _ in _CATALOG if q in t.lower()]
-
 def _portions(title):
 
   n = next(n for t, n in _CATALOG if t == title)
@@ -34,18 +27,12 @@ def _portions(title):
 
 def run_flow(key_source=None, out=None, sleep=SLEEP):
 
-
-  q = prompt("Cari menu:", hint="[ESC] keluar", key_source=key_source, out=out, header=_banner())
-  if q is None:
-    return "quit", None
-  hits = _search(q)
-  if not hits:
-    return "none", None
-  t = select("Pilih menu:", hits, key_source=key_source, out=out, header=_banner())
+  titles = [t for t, _ in _CATALOG]
+  t = select("Cari menu:", titles, search=True, key_source=key_source, out=out, header=_banner())
   if t is None:
     return "quit", None
-  title = hits[t]
-  picks = multiselect(f"Pilih porsi ({title}):", _portions(title), page_size=10,
+  title = titles[t]
+  picks = multiselect(f"Pilih porsi ({title}):", _portions(title), search=True,
                       key_source=key_source, out=out, header=_banner())
   if picks is None:
     return "quit", None
@@ -66,8 +53,6 @@ def main():
       result, data = run_flow()
       if result == "quit":
         status("Sayonara ~ ✦")
-      elif result == "none":
-        status("Gak ketemu. Coba menu lain!")
       elif result == "empty":
         status("Gak ada porsi yang dipilih.")
       else:

@@ -127,7 +127,6 @@ class TestDemo(unittest.TestCase):
     out = io.StringIO()
     keys_iter = iter([
       "n", "a", "s", "i", "enter",
-      "enter",
       "space", "down", "space", "enter",
     ])
     status_, data = demo.run_flow(key_source=keys_iter, out=out, sleep=0)
@@ -135,15 +134,15 @@ class TestDemo(unittest.TestCase):
     self.assertEqual(data, [0, 1])
     self.assertIn("100.0%", out.getvalue())
 
-  def test_no_result(self):
+  def test_cancel_on_escape(self):
     out = io.StringIO()
-    status_, _ = demo.run_flow(key_source=iter(["z", "z", "z", "enter"]), out=out, sleep=0)
-    self.assertEqual(status_, "none")
+    status_, _ = demo.run_flow(key_source=iter(["z", "z", "z", "escape", "escape"]), out=out, sleep=0)
+    self.assertEqual(status_, "quit")
 
   def test_empty_picks(self):
 
     out = io.StringIO()
-    keys_iter = iter(["n", "a", "s", "i", "enter", "enter", "enter"])
+    keys_iter = iter(["n", "a", "s", "i", "enter", "enter"])
     status_, _ = demo.run_flow(key_source=keys_iter, out=out, sleep=0)
     self.assertEqual(status_, "empty")
 
@@ -163,7 +162,6 @@ class TestAnimeDemo(unittest.TestCase):
     out = io.StringIO()
     keys_iter = iter([
       "o", "s", "h", "i", "enter",
-      "enter",
       "space", "down", "space", "enter",
     ])
     status_, data = demo.run_flow(key_source=keys_iter, out=out, sleep=0)
@@ -172,18 +170,107 @@ class TestAnimeDemo(unittest.TestCase):
     self.assertIn("100.0%", out.getvalue())
     self.assertIn("Oshi no Ko", out.getvalue())
 
-  def test_no_result(self):
+  def test_cancel_on_escape(self):
     demo = self._load()
     out = io.StringIO()
-    status_, _ = demo.run_flow(key_source=iter(["z", "z", "z", "enter"]), out=out, sleep=0)
-    self.assertEqual(status_, "none")
+    status_, _ = demo.run_flow(key_source=iter(["z", "z", "z", "escape", "escape"]), out=out, sleep=0)
+    self.assertEqual(status_, "quit")
 
   def test_empty_picks(self):
     demo = self._load()
     out = io.StringIO()
-    keys_iter = iter(["o", "s", "h", "i", "enter", "enter", "enter"])
+    keys_iter = iter(["o", "s", "h", "i", "enter", "enter"])
     status_, _ = demo.run_flow(key_source=keys_iter, out=out, sleep=0)
     self.assertEqual(status_, "empty")
+
+class TestSearch(unittest.TestCase):
+  def test_type_filters_live(self):
+    out = io.StringIO()
+    idx = select("Pilih:", ["Apple", "Banana", "Cherry", "Grape"], search=True,
+                 key_source=iter(["g", "r", "a", "enter"]), out=out)
+    self.assertEqual(idx, 3)
+    frames = [f for f in out.getvalue().split("\x1b[2J") if f]
+    last = strip_ansi(frames[-1])
+    self.assertIn("Grape", last)
+    self.assertNotIn("Apple", last)
+
+  def test_backspace_edits_query(self):
+    out = io.StringIO()
+    idx = select("Pilih:", ["Apple", "Banana", "Cherry"], search=True,
+                 key_source=iter(["b", "a", "n", "backspace", "n", "a", "enter"]), out=out)
+    self.assertEqual(idx, 1)
+
+  def test_escape_clears_then_cancels(self):
+    out = io.StringIO()
+    res = select("Pilih:", ["Apple", "Banana"], search=True,
+                 key_source=iter(["a", "escape", "escape"]), out=out)
+    self.assertIsNone(res)
+
+  def test_enter_on_no_match_noop(self):
+    out = io.StringIO()
+    res = select("Pilih:", ["Apple", "Banana"], search=True,
+                 key_source=iter(["z", "z", "enter", "escape", "escape"]), out=out)
+    self.assertIsNone(res)
+
+  def test_multiselect_search_toggle(self):
+    out = io.StringIO()
+    picked = multiselect("Pilih:", ["Apple", "Banana", "Grape", "Kiwi"], search=True,
+                         key_source=iter(["a", "space", "enter"]), out=out)
+    self.assertEqual(picked, {0})
+
+  def test_search_row_rendered(self):
+    out = io.StringIO()
+    select("Pilih:", ["Apple", "Banana"], search=True,
+           key_source=iter(["a", "enter"]), out=out)
+    raw = strip_ansi(out.getvalue())
+    self.assertIn("Ketik untuk cari", raw)
+    self.assertIn("⌕", raw)
+
+  def test_match_highlighted_in_item(self):
+    out = io.StringIO()
+    select("Pilih:", ["Papaya", "Apple", "Banana"], search=True,
+           key_source=iter(["p", "a", "enter"]), out=out)
+    raw = out.getvalue()
+    self.assertIn(f"\x1b[1m\x1b[38;5;{tuiko.theme.highlight}mPa", raw)
+    self.assertIn(f"\x1b[1m\x1b[38;5;{tuiko.theme.highlight}mpa", raw)
+
+  def test_fuzzy_subsequence_match(self):
+    out = io.StringIO()
+    idx = select("Pilih:", ["Spy x Family", "Spy Kids", "One Piece"], search=True, fuzzy=True,
+                 key_source=iter(["s", "x", "f", "enter"]), out=out)
+    self.assertEqual(idx, 0)
+
+  def test_fuzzy_off_uses_substring(self):
+    out = io.StringIO()
+    res = select("Pilih:", ["Spy x Family", "Spy Kids", "One Piece"], search=True, fuzzy=False,
+                 key_source=iter(["s", "x", "f", "enter", "escape", "escape"]), out=out)
+    self.assertIsNone(res)
+
+  def test_fuzzy_highlights_scattered_chars(self):
+    out = io.StringIO()
+    select("Pilih:", ["Spy x Family", "Spy Kids"], search=True, fuzzy=True,
+           key_source=iter(["s", "x", "f", "enter"]), out=out)
+    raw = out.getvalue()
+    self.assertIn(f"\x1b[1m\x1b[38;5;{tuiko.theme.highlight}mS", raw)
+    self.assertIn(f"\x1b[1m\x1b[38;5;{tuiko.theme.highlight}mx", raw)
+    self.assertIn(f"\x1b[1m\x1b[38;5;{tuiko.theme.highlight}mF", raw)
+
+  def test_search_fits_terminal_height(self):
+    old_w, old_h = tuiko.widgets.term_width, tuiko.widgets.term_height
+    try:
+      tuiko.widgets.term_width = lambda: 80
+      tuiko.widgets.term_height = lambda: 14
+      items = [f"EP{i:02d}" for i in range(1, 41)]
+      out = io.StringIO()
+      select("Pilih:", items, search=True,
+             key_source=iter(["1", "enter"]), out=out)
+      frames = [f for f in out.getvalue().split("\x1b[2J") if f]
+      for frame in frames:
+        rows = [r for r in strip_ansi(frame).splitlines() if r]
+        self.assertLessEqual(len(rows), 14, f"frame overflow: {len(rows)} baris")
+    finally:
+      tuiko.widgets.term_width, tuiko.widgets.term_height = old_w, old_h
+
 
 class TestUiCustom(unittest.TestCase):
   def test_override_icons(self):

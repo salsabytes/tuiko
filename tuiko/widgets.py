@@ -106,7 +106,45 @@ def _title(w, message, pill=""):
     head += " " * max(inner - len(strip_ansi(head)) - len(strip_ansi(pill)) - 1, 2) + pill
   return _side(head, w)
 
-def _item_row(w, text, *, selected, checked=None):
+def _match_ranges(q, text, fuzzy):
+
+  low = text.lower()
+  if fuzzy:
+    ranges = []
+    pos = 0
+    for ch in q:
+      i = low.find(ch, pos)
+      if i < 0:
+        return None
+      ranges.append((i, i + 1))
+      pos = i + 1
+    return ranges
+  ranges = []
+  pos = 0
+  while True:
+    i = low.find(q, pos)
+    if i < 0:
+      break
+    ranges.append((i, i + len(q)))
+    pos = i + len(q)
+  return ranges or None
+
+def _hl_text(text, ranges, base, hl):
+
+  if not ranges:
+    return style(text, *base)
+  out = []
+  pos = 0
+  for a, b in ranges:
+    if a > pos:
+      out.append(style(text[pos:a], *base))
+    out.append(style(text[a:b], 1, hl))
+    pos = b
+  if pos < len(text):
+    out.append(style(text[pos:], *base))
+  return "".join(out)
+
+def _item_row(w, text, *, selected, checked=None, ranges=None):
 
 
   inner = w - 2
@@ -115,10 +153,10 @@ def _item_row(w, text, *, selected, checked=None):
     mark = (style(ui.checked, theme.success) if checked else style(ui.unchecked, theme.muted)) + " "
   if selected:
     bar = style(ui.pointer, 1, theme.accent_bright)
-    content = bar + " " + mark + style(text, 1, theme.select_fg)
+    content = bar + " " + mark + _hl_text(text, ranges, (1, theme.select_fg), theme.highlight)
     pad = max(inner - len(strip_ansi(content)), 0)
     return _side(bg(theme.select_bg, content + " " * pad), w)
-  return _side("  " + mark + style(text, theme.text), w)
+  return _side("  " + mark + _hl_text(text, ranges, (theme.text,), theme.highlight), w)
 
 def _footer(w, hint):
 
@@ -132,10 +170,20 @@ def _rule(w):
 
   return _side(style(ui.rule * (w - 2), theme.faint), w)
 
-def _auto_page_size(header):
+def _search_row(w, query):
+
+  inner = w - 2
+  shown = query[-max(inner - 10, 4):]
+  mark = style(ui.search_mark, theme.muted)
+  body = style(shown, theme.text) if query else style(ui.search_ph, theme.faint)
+  txt = mark + " " + body + style(ui.cursor, theme.accent_bright)
+  pad = max(inner - len(strip_ansi(txt)) - 2, 1)
+  return _side(" " + txt + " " * pad, w)
+
+def _auto_page_size(header, search=False):
 
 
-  fixed = 8 + len(header)
+  fixed = 8 + len(header) + (1 if search else 0)
   return max(term_height() - fixed, 3)
 
 
@@ -185,12 +233,14 @@ def prompt(message, *, default="", hint="", key_source=None, out=None, header=()
       value += k
 
 
-def _list_loop(message, items, *, page_size, multi, keys, out, header=()):
-
+def _list_loop(message, items, *, page_size, multi, search, fuzzy, keys, out, header=()):
 
   if page_size is None:
-    page_size = _auto_page_size(header)
+    page_size = _auto_page_size(header, search)
   total = len(items)
+  query = ""
+  visible = list(range(total))
+  match_map = {}
   max_start = max(0, total - page_size)
   start, sel = 0, 0
   checked = set()
@@ -207,32 +257,106 @@ def _list_loop(message, items, *, page_size, multi, keys, out, header=()):
       start = sel - page_size + 1
     start = max(0, min(start, max_start))
 
+  def _apply_query():
+
+    nonlocal visible, match_map, max_start, pages, start, sel
+    q = query.strip().lower()
+    if not q:
+      visible = list(range(total))
+      match_map = {}
+    else:
+      scored = []
+      match_map = {}
+      for i, it in enumerate(items):
+        ranges = _match_ranges(q, it, fuzzy)
+        if ranges:
+          score = ranges[-1][1] - ranges[0][0] if fuzzy else 0
+          scored.append((score, i))
+          match_map[i] = ranges
+      scored.sort(key=lambda t: (t[0], t[1]))
+      visible = [i for _, i in scored]
+    max_start = max(0, len(visible) - page_size)
+    pages = max(1, (len(visible) + page_size - 1) // page_size)
+    start, sel = 0, 0
+
   while True:
-    end = min(start + page_size, total)
+    n = len(visible)
+    end = min(start + page_size, n)
     w = _card_w()
     rows = [_top(w)]
     if header:
       rows.append(_banner_row(w, header[0]))
       for h in header[1:]:
         rows.append(_side(h, w))
-    pill = _pill(f"{start // page_size + 1}/{pages}")
+    if search and query:
+      pill = _pill(f"{n} {ui.search_n}")
+    else:
+      pill = _pill(f"{start // page_size + 1}/{pages}")
     if multi:
       pill += " " + _pill(f"{len(checked)} {ui.selected_n}")
     rows.append(_title(w, message, pill))
+    if search:
+      rows.append(_search_row(w, query))
     rows.append(_rule(w))
     for i in range(start, end):
-      rows.append(_item_row(w, items[i], selected=(i == sel),
-                            checked=(i in checked) if multi else None))
+      idx = visible[i]
+      rows.append(_item_row(w, items[idx], selected=(i == sel),
+                            checked=(idx in checked) if multi else None,
+                            ranges=match_map.get(idx) if search else None))
     if end - start < page_size:
       rows.append(_side("", w))
     rows.append(_rule(w))
-    hint_line = hint + (f"  {ui.jump_to} [{digit_buf}]" if digit_buf else "")
+    hint_line = hint
+    if digit_buf:
+      hint_line += f"  {ui.jump_to} [{digit_buf}]"
     rows.append(_footer(w, hint_line))
     rows.append(_bottom(w))
     render_frame(rows, out)
 
     k = next(keys)
     now = time.time()
+    if search:
+      if k == "backspace":
+        if query:
+          query = query[:-1]
+          _apply_query()
+      elif k == "space":
+        if multi:
+          if n:
+            idx = visible[sel]
+            checked.discard(idx) if idx in checked else checked.add(idx)
+        else:
+          query += " "
+          _apply_query()
+      elif len(k) == 1 and k.isprintable():
+        query += k
+        _apply_query()
+      elif k == "escape":
+        if query:
+          query = ""
+          _apply_query()
+        else:
+          return None
+      elif k == "enter":
+        if n:
+          return visible[sel], checked
+      elif k == "up":
+        if sel > 0:
+          sel -= 1
+          _fit()
+      elif k == "down":
+        if sel < n - 1:
+          sel += 1
+          _fit()
+      elif k == "pgup":
+        sel = max(sel - page_size, 0)
+        _fit()
+      elif k == "pgdn":
+        sel = min(sel + page_size, n - 1)
+        _fit()
+      elif k == "ctrl-c":
+        raise KeyboardInterrupt
+      continue
     if k.isdigit():
       if now - last_digit > 1.5:
         digit_buf = ""
@@ -267,23 +391,21 @@ def _list_loop(message, items, *, page_size, multi, keys, out, header=()):
     elif k == "ctrl-c":
       raise KeyboardInterrupt
 
-def select(message, items, *, page_size=None, key_source=None, out=None, header=()):
-
+def select(message, items, *, page_size=None, search=False, fuzzy=False, key_source=None, out=None, header=()):
 
   if not items:
     return None
   keys = key_source if key_source is not None else _key_iter()
-  res = _list_loop(message, items, page_size=page_size, multi=False,
+  res = _list_loop(message, items, page_size=page_size, multi=False, search=search or fuzzy, fuzzy=fuzzy,
                    keys=keys, out=out or sys.stdout, header=header)
   return None if res is None else res[0]
 
-def multiselect(message, items, *, page_size=None, key_source=None, out=None, header=()):
-
+def multiselect(message, items, *, page_size=None, search=False, fuzzy=False, key_source=None, out=None, header=()):
 
   if not items:
     return None
   keys = key_source if key_source is not None else _key_iter()
-  res = _list_loop(message, items, page_size=page_size, multi=True,
+  res = _list_loop(message, items, page_size=page_size, multi=True, search=search or fuzzy, fuzzy=fuzzy,
                    keys=keys, out=out or sys.stdout, header=header)
   return None if res is None else res[1]
 
