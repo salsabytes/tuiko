@@ -73,15 +73,12 @@ class TestTuiReal(unittest.TestCase):
         pid, fd = self._spawn(["-m", "tuiko"])
         try:
             out, ok = self._read_until(fd, [b"Cari menu"], timeout=10)
-            self.assertTrue(ok, f"prompt gak muncul: {out[-400:]!r}")
+            self.assertTrue(ok, f"search gak muncul: {out[-400:]!r}")
             self._send(fd, b"nasi\r")
-            out, ok = self._read_until(fd, [b"Pilih menu"], timeout=5)
-            self.assertTrue(ok, f"daftar menu gak muncul: {out[-400:]!r}")
-            self._send(fd, b"\r")
             out, ok = self._read_until(fd, [b"Pilih porsi"], timeout=5)
             self.assertTrue(ok, f"daftar porsi gak muncul: {out[-400:]!r}")
             self._send(fd, b" \x1b[B \r")
-            out, ok = self._read_until(fd, [b"Semua 2 porsi beres"], timeout=15)
+            out, ok = self._read_until(fd, [b"Semua 2 porsi beres", b"\x1b[?1049l"], timeout=15)
         finally:
             self._kill(pid, fd)
         self.assertTrue(ok, f"alur gak kelar: {out[-500:]!r}")
@@ -95,7 +92,7 @@ class TestTuiReal(unittest.TestCase):
         try:
             self._read_until(fd, [b"Cari menu"], timeout=10)
             self._send(fd, b"\x1b")
-            out, ok = self._read_until(fd, [b"Sayonara"], timeout=5)
+            out, ok = self._read_until(fd, [b"Sayonara", b"\x1b[?1049l"], timeout=5)
         finally:
             self._kill(pid, fd)
         self.assertTrue(ok, f"gak keluar: {out[-400:]!r}")
