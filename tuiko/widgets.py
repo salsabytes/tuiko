@@ -5,7 +5,7 @@ import sys
 import time
 from contextlib import contextmanager
 
-from .core import bg, grad, render_frame, strip_ansi, style, term_height, term_width, theme, truncate, ui
+from .core import bg, disp_width, grad, pad_right, render_frame, strip_ansi, style, term_height, term_width, theme, truncate, ui
 from .keys import disable_raw, enable_raw, read_key
 
 
@@ -32,11 +32,11 @@ def box(title, lines, *, width=None):
   w = width or max(term_width() - 2, 20)
   inner = max(w - 4, 10)
   t = truncate(title, inner)
-  dash = max(inner - len(t) - 1, 1)
+  dash = max(inner - disp_width(t) - 1, 1)
   tl, top, tr, side, bl, bottom, br = ui.box_border
   rows = [style(tl + top + " ", theme.accent) + style(t, 1, theme.accent_bright) + style(f" {top * dash}{tr}", theme.accent)]
   for ln in lines:
-    rows.append(f"{side} {truncate(ln, inner).ljust(inner)} {side}")
+    rows.append(f"{side} {pad_right(truncate(ln, inner), inner)} {side}")
   rows.append(style(bl + bottom * (inner + 2) + br, theme.accent))
   return rows
 
@@ -70,9 +70,11 @@ def _card_w():
 def _side(content, w):
 
   inner = w - 2
-  n = len(strip_ansi(content))
+  n = disp_width(strip_ansi(content))
   if n > inner:
     content = truncate(strip_ansi(content), inner)
+    n = disp_width(content)
+    content += " " * max(inner - n, 0)
   else:
     content += " " * (inner - n)
   return ui.box_border[3] + content + ui.box_border[3]
@@ -91,8 +93,9 @@ def _banner_row(w, line):
 
   inner = w - 2
   t = truncate(strip_ansi(line).strip(), inner - 4)
-  left = (inner - len(t)) // 2
-  return _side(" " * left + grad(t, theme.grad) + " " * (inner - left - len(t)), w)
+  tw = disp_width(t)
+  left = (inner - tw) // 2
+  return _side(" " * left + grad(t, theme.grad) + " " * (inner - left - tw), w)
 
 def _pill(text):
 
@@ -103,7 +106,7 @@ def _title(w, message, pill=""):
   inner = w - 2
   head = " " + style(f"{ui.prompt_mark} ", 1, theme.accent_bright) + style(message, 1, theme.accent)
   if pill:
-    head += " " * max(inner - len(strip_ansi(head)) - len(strip_ansi(pill)) - 1, 2) + pill
+    head += " " * max(inner - disp_width(strip_ansi(head)) - disp_width(strip_ansi(pill)) - 1, 2) + pill
   return _side(head, w)
 
 def _match_ranges(q, text, fuzzy):
@@ -154,7 +157,7 @@ def _item_row(w, text, *, selected, checked=None, ranges=None):
   if selected:
     bar = style(ui.pointer, 1, theme.accent_bright)
     content = bar + " " + mark + _hl_text(text, ranges, (1, theme.select_fg), theme.highlight)
-    pad = max(inner - len(strip_ansi(content)), 0)
+    pad = max(inner - disp_width(strip_ansi(content)), 0)
     return _side(bg(theme.select_bg, content + " " * pad), w)
   return _side("  " + mark + _hl_text(text, ranges, (theme.text,), theme.highlight), w)
 
@@ -162,8 +165,8 @@ def _footer(w, hint):
 
   inner = w - 2
   line = _hint(hint)[0]
-  if len(strip_ansi(line)) > inner - 2:
-    line = strip_ansi(line)[: max(inner - 4, 8)].rstrip() + " …"
+  if disp_width(strip_ansi(line)) > inner - 2:
+    line = truncate(strip_ansi(line), max(inner - 4, 8))
   return _side(" " + line, w)
 
 def _rule(w):
@@ -177,7 +180,7 @@ def _search_row(w, query):
   mark = style(ui.search_mark, theme.muted)
   body = style(shown, theme.text) if query else style(ui.search_ph, theme.faint)
   txt = mark + " " + body + style(ui.cursor, theme.accent_bright)
-  pad = max(inner - len(strip_ansi(txt)) - 2, 1)
+  pad = max(inner - disp_width(strip_ansi(txt)) - 2, 1)
   return _side(" " + txt + " " * pad, w)
 
 def _auto_page_size(header, search=False):
@@ -210,7 +213,7 @@ def prompt(message, *, default="", hint="", key_source=None, out=None, header=()
     shown = value[-max(inner - 8, 4):]
     txt = style(shown, theme.text) + style(ui.cursor, theme.accent_bright)
     field_w = max(inner - 2, 8)
-    pad = max(field_w - len(strip_ansi(txt)) - 1, 1)
+    pad = max(field_w - disp_width(strip_ansi(txt)) - 1, 1)
     field = bg(theme.field_bg, " " + txt + " " * pad)
     rows.append(_side(" " + field, w))
     if hint:
@@ -421,7 +424,7 @@ def progress(desc, total=None, *, out=None):
   out = out or sys.stdout
   i = 0
   width = max(term_width() - 4, 20)
-  bar_w = max(width - len(desc) - 16, 8)
+  bar_w = max(width - disp_width(desc) - 16, 8)
 
   def draw(frac, spin):
     if frac is None:

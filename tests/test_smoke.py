@@ -6,7 +6,7 @@ import unittest
 import tuiko
 import tuiko.demo as demo
 from tuiko import keys
-from tuiko.core import esc, strip_ansi, style
+from tuiko.core import disp_width, esc, pad_right, strip_ansi, style, truncate
 from tuiko.widgets import box, multiselect, progress, prompt, select, status
 
 
@@ -17,6 +17,28 @@ class TestCore(unittest.TestCase):
 
   def test_strip_ansi(self):
     self.assertEqual(strip_ansi(style("halo", 36)), "halo")
+
+  def test_disp_width_wide_chars(self):
+    # emoji + CJK count 2 columns, ASCII counts 1
+    self.assertEqual(disp_width("abc"), 3)
+    self.assertEqual(disp_width("📺  Cari anime:"), 15)
+    self.assertEqual(disp_width("日本語"), 6)
+
+  def test_disp_width_strips_ansi(self):
+    self.assertEqual(disp_width(style("📺 x", 36)), 4)
+
+  def test_pad_right_wide(self):
+    self.assertEqual(pad_right("📺", 5), "📺   ")
+    self.assertEqual(disp_width(pad_right("📺", 5)), 5)
+
+  def test_truncate_wide(self):
+    # truncate must fit within `width` display columns, not char count
+    t = truncate("日本語のアニメタイトル", 6)
+    self.assertLessEqual(disp_width(t), 6)
+    self.assertTrue(t.endswith("…"))
+
+  def test_truncate_ascii_unchanged(self):
+    self.assertEqual(truncate("halo", 10), "halo")
 
   def test_box(self):
     lines = box("Judul", ["satu", "dua"], width=40)
@@ -324,6 +346,41 @@ class TestSearch(unittest.TestCase):
     finally:
       tuiko.widgets.term_width, tuiko.widgets.term_height = old_w, old_h
 
+
+class TestWideAlign(unittest.TestCase):
+  def _frame_widths(self, out):
+    rows = []
+    for l in strip_ansi(out.getvalue().split("\x1b[2J")[-1]).splitlines():
+      if l.strip():
+        rows.append(disp_width(l))
+    return rows
+
+  def test_emoji_title_row_aligned(self):
+    # regression: 📺 in the title made the pill row 1 col wider than the box
+    old_w, old_h = tuiko.widgets.term_width, tuiko.widgets.term_height
+    try:
+      tuiko.widgets.term_width = lambda: 80
+      tuiko.widgets.term_height = lambda: 24
+      out = io.StringIO()
+      select("📺  Cari anime:", [f"Anime {i}" for i in range(67)], page_size=1,
+             key_source=iter(["enter"]), out=out)
+      widths = set(self._frame_widths(out))
+      self.assertEqual(len(widths), 1, f"rows misaligned: {sorted(widths)}")
+      self.assertEqual(widths.pop(), 76)
+    finally:
+      tuiko.widgets.term_width, tuiko.widgets.term_height = old_w, old_h
+
+  def test_cjk_items_aligned(self):
+    old_w, old_h = tuiko.widgets.term_width, tuiko.widgets.term_height
+    try:
+      tuiko.widgets.term_width = lambda: 80
+      tuiko.widgets.term_height = lambda: 24
+      out = io.StringIO()
+      select("Pilih:", ["葬送のフリーレン", "Spy x Family"], key_source=iter(["enter"]), out=out)
+      widths = set(self._frame_widths(out))
+      self.assertEqual(len(widths), 1, f"rows misaligned: {sorted(widths)}")
+    finally:
+      tuiko.widgets.term_width, tuiko.widgets.term_height = old_w, old_h
 
 class TestUiCustom(unittest.TestCase):
   def test_override_icons(self):

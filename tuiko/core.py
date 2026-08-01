@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 import sys
+import unicodedata
 
 __version__ = "0.1.1"
 
@@ -118,11 +119,36 @@ def term_height():
 
   return shutil.get_terminal_size((80, 24)).lines
 
+def disp_width(text):
+
+  """Display columns of `text` — ANSI-safe; wide (CJK/emoji) chars count 2."""
+  text = _ANSI_RE.sub("", text)
+  w = 0
+  for ch in text:
+    if unicodedata.combining(ch):
+      continue
+    w += 2 if unicodedata.east_asian_width(ch) in "WF" else 1
+  return w
+
+def pad_right(text, width):
+
+  """Right-pad plain `text` to exactly `width` display columns."""
+  return text + " " * max(width - disp_width(text), 0)
+
 def truncate(text, width):
 
-  if len(text) <= width:
+  """Truncate to fit `width` display columns (wide-aware), end with …."""
+  if disp_width(text) <= width:
     return text
-  return text[: max(0, width - 1)] + "…"
+  out = []
+  used = 0
+  for ch in text:
+    cw = disp_width(ch)
+    if used + cw > max(width - 1, 0):
+      break
+    out.append(ch)
+    used += cw
+  return "".join(out) + "…"
 
 
 CLEAR = "\x1b[2J"
