@@ -233,7 +233,7 @@ def prompt(message, *, default="", hint="", key_source=None, out=None, header=()
       value += k
 
 
-def _list_loop(message, items, *, page_size, multi, search, fuzzy, keys, out, header=()):
+def _list_loop(message, items, *, page_size, multi, search, fuzzy, keys, out, header=(), shortcuts=None):
 
   if page_size is None:
     page_size = _auto_page_size(header, search)
@@ -246,6 +246,8 @@ def _list_loop(message, items, *, page_size, multi, search, fuzzy, keys, out, he
   checked = set()
   digit_buf, last_digit = "", 0.0
   hint = ui.hint_multiselect if multi else ui.hint_select
+  if shortcuts:
+    hint += "  ·  " + "  ·  ".join(f"[{k}] {v}" for k, v in shortcuts.items())
   pages = max(1, (total + page_size - 1) // page_size)
 
   def _fit():
@@ -315,6 +317,8 @@ def _list_loop(message, items, *, page_size, multi, search, fuzzy, keys, out, he
 
     k = next(keys)
     now = time.time()
+    if shortcuts and k in shortcuts:
+      return ("shortcut", shortcuts[k])
     if search:
       if k == "backspace":
         if query:
@@ -391,22 +395,22 @@ def _list_loop(message, items, *, page_size, multi, search, fuzzy, keys, out, he
     elif k == "ctrl-c":
       raise KeyboardInterrupt
 
-def select(message, items, *, page_size=None, search=False, fuzzy=False, key_source=None, out=None, header=()):
+def select(message, items, *, page_size=None, search=False, fuzzy=False, shortcuts=None, key_source=None, out=None, header=()):
 
   if not items:
     return None
   keys = key_source if key_source is not None else _key_iter()
   res = _list_loop(message, items, page_size=page_size, multi=False, search=search or fuzzy, fuzzy=fuzzy,
-                   keys=keys, out=out or sys.stdout, header=header)
-  return None if res is None else res[0]
+                   keys=keys, out=out or sys.stdout, header=header, shortcuts=shortcuts)
+  return None if res is None else (res[1] if res[0] == "shortcut" else res[0])
 
-def multiselect(message, items, *, page_size=None, search=False, fuzzy=False, key_source=None, out=None, header=()):
+def multiselect(message, items, *, page_size=None, search=False, fuzzy=False, shortcuts=None, key_source=None, out=None, header=()):
 
   if not items:
     return None
   keys = key_source if key_source is not None else _key_iter()
   res = _list_loop(message, items, page_size=page_size, multi=True, search=search or fuzzy, fuzzy=fuzzy,
-                   keys=keys, out=out or sys.stdout, header=header)
+                   keys=keys, out=out or sys.stdout, header=header, shortcuts=shortcuts)
   return None if res is None else res[1]
 
 

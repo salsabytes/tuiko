@@ -1,7 +1,6 @@
 # Tuiko
 
-> [!WARNING]
-> **This project is a work in progress — it is NOT finished yet.**
+> **Status: work in progress — this project is NOT finished yet.**
 >
 > The API and behavior may change at any time without notice. Do not use it in
 > production. Everything you see here is experimental.
@@ -27,7 +26,6 @@ dependencies. It renders with ANSI escape codes and reads input via `msvcrt`
 ## What is missing
 
 - Full API documentation
-- Packaging & publishing to PyPI
 - Integration with other projects (e.g. Indonime)
 - Battle-tested stability — expect rough edges
 

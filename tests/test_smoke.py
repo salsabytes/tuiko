@@ -43,6 +43,24 @@ class TestKeys(unittest.TestCase):
     self.assertEqual(keys._normalize_char("a"), "a")
     self.assertEqual(keys._normalize_char("\x03"), "ctrl-c")
 
+  def test_ctrl_letters(self):
+    self.assertEqual(keys._normalize_char("\x10"), "ctrl-p")
+    self.assertEqual(keys._normalize_char("\x11"), "ctrl-q")
+    self.assertEqual(keys._normalize_char("\x01"), "ctrl-a")
+
+  def test_alt_keys(self):
+    # Windows Alt+letter arrives as \x00 + letter (uppercase or lowercase) → alt-<key>,
+    # and must NOT collide with arrow keys (\xe0 + letter)
+    self.assertEqual(keys._parse_win("\x00", "p"), "alt-p")
+    self.assertEqual(keys._parse_win("\x00", "P"), "alt-p")
+    self.assertEqual(keys._parse_win("\x00", "q"), "alt-q")
+    self.assertEqual(keys._parse_win("\x00", "Q"), "alt-q")
+    self.assertEqual(keys._parse_win("\xe0", "P"), "down")
+    self.assertEqual(keys._parse_win("\xe0", "Q"), "pgdn")
+    # VT/terminal mode: ESC + letter → alt-<key>
+    self.assertEqual(keys._parse_posix(b"\x1bp"), "alt-p")
+    self.assertEqual(keys._parse_posix(b"\x1bq"), "alt-q")
+
 
 class TestPrompt(unittest.TestCase):
   def test_typing(self):
@@ -87,6 +105,41 @@ class TestSelect(unittest.TestCase):
 
   def test_empty(self):
     self.assertIsNone(select("Pilih:", [], key_source=iter([]), out=io.StringIO()))
+
+
+class TestShortcuts(unittest.TestCase):
+  def test_select_returns_shortcut_action(self):
+    out = io.StringIO()
+    res = select("Pilih:", ["Apple", "Banana"], shortcuts={"ctrl-q": "quit"},
+                 key_source=iter(["ctrl-q"]), out=out)
+    self.assertEqual(res, "quit")
+
+  def test_select_shortcut_hint_shown(self):
+    old = tuiko.widgets.term_width
+    try:
+      tuiko.widgets.term_width = lambda: 120  # enough room for base hint + shortcuts
+      out = io.StringIO()
+      select("Pilih:", ["Apple"], shortcuts={"alt-p": "provider", "ctrl-q": "quit"},
+             key_source=iter(["enter"]), out=out)
+      raw = strip_ansi(out.getvalue())
+      self.assertIn("alt-p", raw)
+      self.assertIn("provider", raw)
+      self.assertIn("ctrl-q", raw)
+      self.assertIn("quit", raw)
+    finally:
+      tuiko.widgets.term_width = old
+
+  def test_normal_pick_still_works_with_shortcuts(self):
+    out = io.StringIO()
+    idx = select("Pilih:", ["Apple", "Banana", "Cherry"], shortcuts={"ctrl-q": "quit"},
+                 key_source=iter(["down", "enter"]), out=out)
+    self.assertEqual(idx, 1)
+
+  def test_multiselect_shortcut(self):
+    out = io.StringIO()
+    res = multiselect("Pilih:", ["Apple", "Banana"], shortcuts={"ctrl-q": "quit"},
+                      key_source=iter(["ctrl-q"]), out=out)
+    self.assertEqual(res, "quit")
 
 
 class TestMultiselect(unittest.TestCase):
