@@ -315,6 +315,19 @@ class TestSearch(unittest.TestCase):
                  key_source=iter(["s", "x", "f", "enter"]), out=out)
     self.assertEqual(idx, 0)
 
+  def test_fuzzy_prefix_ranked_first(self):
+    # typing "kyou": "Kyoukai no Kanata" (first word matches) must top the list
+    # even though "Ansatsu Kyoushitsu" (second word) appears earlier in source order
+    titles = ["Ansatsu Kyoushitsu", "Kyoukai no Kanata", "Denpa Kyoushi", "Gal to Kyouryuu"]
+    out = io.StringIO()
+    idx = select("Pilih:", titles, search=True, fuzzy=True,
+                 key_source=iter(["k", "y", "o", "u", "enter"]), out=out)
+    self.assertEqual(idx, 1)  # original index of "Kyoukai no Kanata"
+    frames = [f for f in out.getvalue().split("\x1b[2J") if f]
+    last = strip_ansi(frames[-1])
+    self.assertLess(last.index("Kyoukai no Kanata"), last.index("Ansatsu Kyoushitsu"),
+                    "first-word match harus lebih atas dari second-word match")
+
   def test_fuzzy_off_uses_substring(self):
     out = io.StringIO()
     res = select("Pilih:", ["Spy x Family", "Spy Kids", "One Piece"], search=True, fuzzy=False,
