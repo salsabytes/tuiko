@@ -2,10 +2,11 @@
 
 import re
 import sys
+import threading
 import time
 from contextlib import contextmanager
 
-from .core import bg, disp_width, grad, pad_right, render_frame, strip_ansi, style, term_height, term_width, theme, truncate, ui
+from .core import bg, disp_width, grad, render_frame, strip_ansi, style, term_height, term_width, theme, truncate, ui
 from .keys import disable_raw, enable_raw, read_key
 
 
@@ -25,20 +26,6 @@ def session(out=None):
     disable_raw()
     out.write(SHOW_CURSOR + ALT_OUT)
     out.flush()
-
-
-def box(title, lines, *, width=None):
-
-  w = width or max(term_width() - 2, 20)
-  inner = max(w - 4, 10)
-  t = truncate(title, inner)
-  dash = max(inner - disp_width(t) - 1, 1)
-  tl, top, tr, side, bl, bottom, br = ui.box_border
-  rows = [style(tl + top + " ", theme.accent) + style(t, 1, theme.accent_bright) + style(f" {top * dash}{tr}", theme.accent)]
-  for ln in lines:
-    rows.append(f"{side} {pad_right(truncate(ln, inner), inner)} {side}")
-  rows.append(style(bl + bottom * (inner + 2) + br, theme.accent))
-  return rows
 
 
 def _keycap(key):
@@ -326,11 +313,13 @@ def _list_loop(message, items, *, page_size, multi, search, fuzzy, keys, out, he
     if shortcuts and k in shortcuts:
       return ("shortcut", shortcuts[k])
     if search:
+      # search-input keys: edit the query, then re-render
       if k == "backspace":
         if query:
           query = query[:-1]
           _apply_query()
-      elif k == "space":
+        continue
+      if k == "space":
         if multi:
           if n:
             idx = visible[sel]
@@ -338,36 +327,17 @@ def _list_loop(message, items, *, page_size, multi, search, fuzzy, keys, out, he
         else:
           query += " "
           _apply_query()
-      elif len(k) == 1 and k.isprintable():
+        continue
+      if len(k) == 1 and k.isprintable():
         query += k
         _apply_query()
-      elif k == "escape":
-        if query:
-          query = ""
-          _apply_query()
-        else:
-          return None
-      elif k == "enter":
-        if n:
-          return visible[sel], checked
-      elif k == "up":
-        if sel > 0:
-          sel -= 1
-          _fit()
-      elif k == "down":
-        if sel < n - 1:
-          sel += 1
-          _fit()
-      elif k == "pgup":
-        sel = max(sel - page_size, 0)
-        _fit()
-      elif k == "pgdn":
-        sel = min(sel + page_size, n - 1)
-        _fit()
-      elif k == "ctrl-c":
-        raise KeyboardInterrupt
-      continue
-    if k.isdigit():
+        continue
+      if k == "escape" and query:
+        query = ""
+        _apply_query()
+        continue
+      # everything else (nav/enter/escape/ctrl-c) falls through to the shared handler
+    if k.isdigit() and not search:
       if now - last_digit > 1.5:
         digit_buf = ""
       digit_buf += k
@@ -378,24 +348,30 @@ def _list_loop(message, items, *, page_size, multi, search, fuzzy, keys, out, he
         _fit()
       continue
     digit_buf = ""
+    # shared navigation: search bounds by the filtered list, otherwise total
+    limit = n if search else total
     if k == "up":
       if sel > 0:
         sel -= 1
         _fit()
     elif k == "down":
-      if sel < total - 1:
+      if sel < limit - 1:
         sel += 1
         _fit()
     elif k == "pgup":
       sel = max(sel - page_size, 0)
       _fit()
     elif k == "pgdn":
-      sel = min(sel + page_size, total - 1)
+      sel = min(sel + page_size, limit - 1)
       _fit()
-    elif k == "space" and multi:
+    elif k == "space" and multi and not search:
       checked.discard(sel) if sel in checked else checked.add(sel)
     elif k == "enter":
-      return sel, checked
+      if search:
+        if n:
+          return visible[sel], checked
+      else:
+        return sel, checked
     elif k == "escape":
       return None
     elif k == "ctrl-c":
@@ -453,10 +429,25 @@ def progress(desc, total=None, *, out=None):
     else:
       draw(completed / total if total else 0, i)
 
+  # Indeterminate spinner: repaint from a daemon thread so blocking callers
+  # (network fetches that never call update) still get a live animation.
+  stop = threading.Event()
+  spin_thread = None
+  if total is None:
+    def _autospin():
+      n = 0
+      while not stop.wait(0.1):
+        n += 1
+        draw(None, n)
+    spin_thread = threading.Thread(target=_autospin, daemon=True)
+    spin_thread.start()
   draw(None, 0)
   try:
     yield update
   finally:
+    if spin_thread is not None:
+      stop.set()
+      spin_thread.join(timeout=0.5)
     out.write("\n")
     out.flush()
 

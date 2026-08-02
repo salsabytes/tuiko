@@ -1,7 +1,7 @@
 
 
 from . import keys
-from .core import __version__, bg, grad, palette, sep, strip_ansi, style, term_width, theme, ui
+from .core import __version__, bg, grad, sep, strip_ansi, style, term_width, theme, ui
 from .widgets import (
   multiselect,
   progress,
@@ -13,7 +13,6 @@ from .widgets import (
 
 __all__ = [
   "keys",
-  "palette",
   "prompt",
   "select",
   "multiselect",

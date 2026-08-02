@@ -13,16 +13,6 @@ def esc(*codes):
   return f"\x1b[{';'.join(map(str, codes))}m"
 
 RESET = "\x1b[0m"
-BOLD, DIM = 1, 2
-
-
-class palette:
-
-
-  black, red, green, yellow, blue, magenta, cyan, white = range(30, 38)
-  gray, bright_cyan, bright_green, bright_yellow = 90, 96, 92, 93
-
-  dark_cyan, mint, gold, sky = 24, 114, 220, 117
 
 
 class theme:

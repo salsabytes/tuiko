@@ -7,7 +7,7 @@ import tuiko
 import tuiko.demo as demo
 from tuiko import keys
 from tuiko.core import disp_width, esc, pad_right, strip_ansi, style, truncate
-from tuiko.widgets import box, multiselect, progress, prompt, select, status
+from tuiko.widgets import multiselect, progress, prompt, select, status
 
 
 class TestCore(unittest.TestCase):
@@ -39,12 +39,6 @@ class TestCore(unittest.TestCase):
 
   def test_truncate_ascii_unchanged(self):
     self.assertEqual(truncate("halo", 10), "halo")
-
-  def test_box(self):
-    lines = box("Judul", ["satu", "dua"], width=40)
-    self.assertTrue(strip_ansi(lines[0]).startswith("╭"))
-    self.assertTrue(strip_ansi(lines[-1]).startswith("╰"))
-    self.assertIn("satu", lines[1])
 
 
 class TestKeys(unittest.TestCase):
@@ -194,6 +188,16 @@ class TestProgress(unittest.TestCase):
     with progress("Kerja", total=None, out=out) as up:
       up(None)
     self.assertIn("⠋", out.getvalue())
+
+  def test_spinner_auto_animates_while_blocked(self):
+    # a blocking caller (network fetch that never calls update) must still
+    # see the spinner animate — regression: it froze on the first glyph
+    import time
+    out = io.StringIO()
+    with progress("Kerja", total=None, out=out):
+      time.sleep(0.35)  # simulate a blocking call, no update() calls
+    frames = [c for c in out.getvalue() if c in "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"]
+    self.assertGreater(len(frames), 2, "spinner must animate while blocked")
 
 
 class TestDemo(unittest.TestCase):
@@ -436,16 +440,6 @@ class TestUiCustom(unittest.TestCase):
       self.assertIn("★ Tuiko", strip_ansi(out.getvalue()))
     finally:
       tuiko.ui.banner = old
-
-  def test_box_border_custom(self):
-    old = tuiko.ui.box_border
-    try:
-      tuiko.ui.box_border = "+-+|+++"
-      lines = box("Judul", ["satu"], width=40)
-      self.assertTrue(strip_ansi(lines[0]).startswith("+"))
-      self.assertTrue(strip_ansi(lines[-1]).startswith("+"))
-    finally:
-      tuiko.ui.box_border = old
 
 class TestStatusBar(unittest.TestCase):
   def test_prompt_bar(self):

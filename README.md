@@ -53,7 +53,6 @@ tuiko.ui.hint_select = "[↑/↓] Move · [ENTER] Select · [ESC] Cancel"
 
 ## Examples
 
-- `example.py` — full flow with custom text & colors
 - `examples/custom_ui.py` — override all text & icons
 - `examples/anime_search.py` — anime search demo in the style of Indonime (mock data)
 
