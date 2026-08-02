@@ -41,7 +41,6 @@ class ui:
   bar_fill = "█"
   bar_empty = "░"
   tick = "✓"
-  hint_mark = "·"
   rule = "─"
   box_border = "╭─╮│╰─╯"
   spinner = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"

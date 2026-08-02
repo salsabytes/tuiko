@@ -35,19 +35,16 @@ def _keycap(key):
 def _hint(text):
 
 
-  lines = []
-  for line in text.split("\n"):
-    parts = []
-    pos = 0
-    for m in re.finditer(r"\[([^\]]+)\]", line):
-      if pos < m.start():
-        parts.append(style(line[pos:m.start()], theme.muted))
-      parts.append(_keycap(m.group(1)))
-      pos = m.end()
-    if pos < len(line):
-      parts.append(style(line[pos:], theme.muted))
-    lines.append("".join(parts))
-  return lines
+  parts = []
+  pos = 0
+  for m in re.finditer(r"\[([^\]]+)\]", text):
+    if pos < m.start():
+      parts.append(style(text[pos:m.start()], theme.muted))
+    parts.append(_keycap(m.group(1)))
+    pos = m.end()
+  if pos < len(text):
+    parts.append(style(text[pos:], theme.muted))
+  return "".join(parts)
 
 
 def _card_w():
@@ -151,7 +148,7 @@ def _item_row(w, text, *, selected, checked=None, ranges=None):
 def _footer(w, hint):
 
   inner = w - 2
-  line = _hint(hint)[0]
+  line = _hint(hint)
   if disp_width(strip_ansi(line)) > inner - 2:
     line = truncate(strip_ansi(line), max(inner - 4, 8))
   return _side(" " + line, w)
