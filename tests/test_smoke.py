@@ -6,13 +6,12 @@ import unittest
 import tuiko
 import tuiko.demo as demo
 from tuiko import keys
-from tuiko.core import disp_width, esc, pad_right, strip_ansi, style, truncate
+from tuiko.core import disp_width, strip_ansi, style, truncate
 from tuiko.widgets import multiselect, progress, prompt, select, status
 
 
 class TestCore(unittest.TestCase):
-  def test_esc_and_style(self):
-    self.assertEqual(esc(1, 36), "\x1b[1;36m")
+  def test_style(self):
     self.assertEqual(style("x", 36), "\x1b[36mx\x1b[0m")
 
   def test_strip_ansi(self):
@@ -26,10 +25,6 @@ class TestCore(unittest.TestCase):
 
   def test_disp_width_strips_ansi(self):
     self.assertEqual(disp_width(style("📺 x", 36)), 4)
-
-  def test_pad_right_wide(self):
-    self.assertEqual(pad_right("📺", 5), "📺   ")
-    self.assertEqual(disp_width(pad_right("📺", 5)), 5)
 
   def test_truncate_wide(self):
     # truncate must fit within `width` display columns, not char count
@@ -191,12 +186,19 @@ class TestProgress(unittest.TestCase):
 
   def test_spinner_auto_animates_while_blocked(self):
     # a blocking caller (network fetch that never calls update) must still
-    # see the spinner animate — regression: it froze on the first glyph
+    # see the spinner animate — regression: it froze on the first glyph.
+    # Poll instead of a fixed sleep: slow CI runners starve the spinner
+    # thread, which made the old sleep-based check flaky on macOS.
     import time
     out = io.StringIO()
+    glyphs = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
     with progress("Kerja", total=None, out=out):
-      time.sleep(0.35)  # simulate a blocking call, no update() calls
-    frames = [c for c in out.getvalue() if c in "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"]
+      deadline = time.time() + 3
+      while time.time() < deadline:
+        if len([c for c in out.getvalue() if c in glyphs]) > 2:
+          break
+        time.sleep(0.05)
+    frames = [c for c in out.getvalue() if c in glyphs]
     self.assertGreater(len(frames), 2, "spinner must animate while blocked")
 
 

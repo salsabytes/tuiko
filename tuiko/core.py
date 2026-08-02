@@ -7,11 +7,6 @@ import unicodedata
 
 __version__ = "0.1.2"
 
-
-def esc(*codes):
-
-  return f"\x1b[{';'.join(map(str, codes))}m"
-
 RESET = "\x1b[0m"
 
 
@@ -119,11 +114,6 @@ def disp_width(text):
       continue
     w += 2 if unicodedata.east_asian_width(ch) in "WF" else 1
   return w
-
-# Right-pad plain text to exactly `width` display columns.
-def pad_right(text, width):
-
-  return text + " " * max(width - disp_width(text), 0)
 
 # Truncate to fit `width` display columns (wide-aware), end with ….
 def truncate(text, width):
