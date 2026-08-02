@@ -275,9 +275,10 @@ def _list_loop(message, items, *, page_size, multi, search, fuzzy, keys, out, he
       for i, it in enumerate(items):
         ranges = _match_ranges(q, it, fuzzy)
         if ranges:
-          # (start, span): matches that begin earlier (e.g. first word)
-          # outrank later matches even when the span ties.
-          score = (ranges[0][0], ranges[-1][1] - ranges[0][0]) if fuzzy else 0
+          # (span, start): tight/complete matches rank first (contiguous
+          # "punch" beats a scattered one); on ties, earlier start wins
+          # (first word beats second word).
+          score = (ranges[-1][1] - ranges[0][0], ranges[0][0]) if fuzzy else 0
           scored.append((score, i))
           match_map[i] = ranges
       scored.sort(key=lambda t: (t[0], t[1]))

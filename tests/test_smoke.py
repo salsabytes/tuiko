@@ -328,6 +328,23 @@ class TestSearch(unittest.TestCase):
     self.assertLess(last.index("Kyoukai no Kanata"), last.index("Ansatsu Kyoushitsu"),
                     "first-word match harus lebih atas dari second-word match")
 
+  def test_fuzzy_tightest_match_first(self):
+    # "punch": contiguous "Punch" titles must beat a scattered subsequence
+    # match that merely starts earlier in the string
+    titles = [
+      "Party kara Tsuihou sareta Sono Chiyushi, Jitsu wa Saikyou ni Tsuki",
+      "One Punch Man",
+      "Mayonaka Punch",
+    ]
+    out = io.StringIO()
+    idx = select("Pilih:", titles, search=True, fuzzy=True,
+                 key_source=iter(["p", "u", "n", "c", "h", "enter"]), out=out)
+    self.assertEqual(idx, 1)  # original index of "One Punch Man"
+    frames = [f for f in out.getvalue().split("\x1b[2J") if f]
+    last = strip_ansi(frames[-1])
+    self.assertLess(last.index("One Punch Man"), last.index("Party kara"),
+                    "contiguous match harus di atas scattered subsequence match")
+
   def test_fuzzy_off_uses_substring(self):
     out = io.StringIO()
     res = select("Pilih:", ["Spy x Family", "Spy Kids", "One Piece"], search=True, fuzzy=False,
