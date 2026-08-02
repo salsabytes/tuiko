@@ -119,9 +119,9 @@ def term_height():
 
   return shutil.get_terminal_size((80, 24)).lines
 
+# Display columns of text — ANSI-safe; wide (CJK/emoji) chars count 2.
 def disp_width(text):
 
-  """Display columns of `text` — ANSI-safe; wide (CJK/emoji) chars count 2."""
   text = _ANSI_RE.sub("", text)
   w = 0
   for ch in text:
@@ -130,14 +130,14 @@ def disp_width(text):
     w += 2 if unicodedata.east_asian_width(ch) in "WF" else 1
   return w
 
+# Right-pad plain text to exactly `width` display columns.
 def pad_right(text, width):
 
-  """Right-pad plain `text` to exactly `width` display columns."""
   return text + " " * max(width - disp_width(text), 0)
 
+# Truncate to fit `width` display columns (wide-aware), end with ….
 def truncate(text, width):
 
-  """Truncate to fit `width` display columns (wide-aware), end with …."""
   if disp_width(text) <= width:
     return text
   out = []

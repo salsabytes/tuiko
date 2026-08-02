@@ -1,12 +1,11 @@
-"""keydebug — lihat key mentah yang dikirim terminal kamu.
-
-Cara pakai:
-  python keydebug.py          # mode raw: byte mentah dari msvcrt/termios
-  python keydebug.py --tuiko  # mode tuiko: hasil read_key() yang dipakai indonime
-
-Tekan tombol yang mau dicek (alt+p, alt+q, ctrl+p, ctrl+q, arrow, escape).
-Tekan 'q' (tanpa modifier) untuk keluar.
-"""
+# keydebug — inspect the raw keys your terminal sends.
+#
+# Usage:
+#   python keydebug.py          # raw mode: raw bytes from msvcrt/termios
+#   python keydebug.py --tuiko  # tuiko mode: read_key() output like indonime uses
+#
+# Press the key you want to inspect (alt+p, alt+q, ctrl+p, ctrl+q, arrow, escape).
+# Press 'q' (no modifier) to quit.
 import os
 import sys
 

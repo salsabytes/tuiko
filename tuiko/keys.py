@@ -88,9 +88,9 @@ def read_key():
     return _normalize_char(ch)
   return _read_posix()
 
+# Parse ESC-prefixed sequences on Windows (VT mode / modern terminals).
 def _read_win_esc():
 
-  """Parse ESC-prefixed sequences on Windows (VT mode / modern terminals)."""
   import msvcrt
   import time
   time.sleep(0.02)  # let the rest of the sequence arrive
