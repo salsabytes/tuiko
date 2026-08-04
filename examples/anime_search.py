@@ -23,7 +23,6 @@ SLEEP = 0.05
 def _apply_theme():
   ui.banner = "✦ Indonime"
   ui.star = "✦"
-  ui.working = "Mencari stream..."
   ui.selected_n = "episode dipilih"
   ui.jump_to = "→ Lompat ke:"
 

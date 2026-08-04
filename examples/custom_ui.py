@@ -1,3 +1,4 @@
+# Custom UI — ubah semua teks & icon lewat tuiko.ui, lalu jalanin demo flow-nya.
 import os
 import sys
 
@@ -17,7 +18,6 @@ tuiko.ui.tick = "✔"
 tuiko.ui.rule = "-"
 tuiko.ui.box_border = "+-+|+++"
 tuiko.ui.spinner = "◐◓◑◒"
-tuiko.ui.working = "Proses..."
 tuiko.ui.selected_n = "dipilih"
 tuiko.ui.jump_to = "→ Loncat ke:"
 tuiko.ui.pct = "%"
@@ -27,5 +27,4 @@ tuiko.ui.hint_multiselect = "[↑/↓] Gerak · [SPACE] Tandai · [ENTER] Lanjut
 if __name__ == "__main__":
     from tuiko import demo
 
-    print("Demo Tuiko dengan gaya custom — semua teks & icon dari tuiko.ui")
-    demo.main()
+    demo.main()  # flow yang sama, tapi dengan gaya custom di atas

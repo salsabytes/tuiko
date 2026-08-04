@@ -32,18 +32,19 @@ def run_flow(key_source=None, out=None, sleep=SLEEP):
   if t is None:
     return "quit", None
   title = titles[t]
-  picks = multiselect(f"Pilih porsi ({title}):", _portions(title), search=True,
+  portions = _portions(title)
+  picks = multiselect(f"Pilih porsi ({title}):", portions, search=True,
                       key_source=key_source, out=out, header=_banner())
   if picks is None:
     return "quit", None
   if not picks:
     return "empty", None
   for i in sorted(picks):
-    with progress(f"Masak {_portions(title)[i]}", total=100, out=out) as up:
+    with progress(f"Masak {portions[i]}", total=100, out=out) as up:
       for p in range(0, 101, 10):
         up(p)
         time.sleep(sleep)
-    status(f"✓ {_portions(title)[i]} siap → meja", out=out)
+    status(f"✓ {portions[i]} siap → meja", out=out)
   return "done", sorted(picks)
 
 def main():

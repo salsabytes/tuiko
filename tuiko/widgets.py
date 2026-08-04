@@ -167,6 +167,15 @@ def _search_row(w, query):
   pad = max(inner - disp_width(strip_ansi(txt)) - 2, 1)
   return _side(" " + txt + " " * pad, w)
 
+def _header_rows(w, header):
+
+  rows = []
+  if header:
+    rows.append(_banner_row(w, header[0]))
+    for h in header[1:]:
+      rows.append(_side(h, w))
+  return rows
+
 def _auto_page_size(header, search=False):
 
 
@@ -198,10 +207,7 @@ def prompt(message, *, default="", hint="", key_source=None, out=None, header=()
     w = _card_w()
     inner = w - 2
     rows = [_top(w)]
-    if header:
-      rows.append(_banner_row(w, header[0]))
-      for h in header[1:]:
-        rows.append(_side(h, w))
+    rows += _header_rows(w, header)
     rows.append(_title(w, message))
 
     shown = value[-max(inner - 8, 4):]
@@ -295,10 +301,7 @@ def _list_loop(message, items, *, page_size, multi, search, fuzzy, keys, out, he
     end = min(start + page_size, n)
     w = _card_w()
     rows = [_top(w)]
-    if header:
-      rows.append(_banner_row(w, header[0]))
-      for h in header[1:]:
-        rows.append(_side(h, w))
+    rows += _header_rows(w, header)
     if search and query:
       pill = _pill(f"{n} {ui.search_n}")
     else:
@@ -395,22 +398,24 @@ def _list_loop(message, items, *, page_size, multi, search, fuzzy, keys, out, he
     elif k == "ctrl-c":
       raise KeyboardInterrupt
 
-def select(message, items, *, page_size=None, search=False, fuzzy=False, shortcuts=None, key_source=None, out=None, header=()):
+def _pick(message, items, multi, *, page_size=None, search=False, fuzzy=False, shortcuts=None, key_source=None, out=None, header=()):
 
   if not items:
     return None
   keys = key_source if key_source is not None else _key_iter()
-  res = _list_loop(message, items, page_size=page_size, multi=False, search=search or fuzzy, fuzzy=fuzzy,
-                   keys=keys, out=out or sys.stdout, header=header, shortcuts=shortcuts)
+  return _list_loop(message, items, page_size=page_size, multi=multi, search=search or fuzzy, fuzzy=fuzzy,
+                    keys=keys, out=out or sys.stdout, header=header, shortcuts=shortcuts)
+
+def select(message, items, *, page_size=None, search=False, fuzzy=False, shortcuts=None, key_source=None, out=None, header=()):
+
+  res = _pick(message, items, False, page_size=page_size, search=search, fuzzy=fuzzy, shortcuts=shortcuts,
+              key_source=key_source, out=out, header=header)
   return None if res is None else (res[1] if res[0] == "shortcut" else res[0])
 
 def multiselect(message, items, *, page_size=None, search=False, fuzzy=False, shortcuts=None, key_source=None, out=None, header=()):
 
-  if not items:
-    return None
-  keys = key_source if key_source is not None else _key_iter()
-  res = _list_loop(message, items, page_size=page_size, multi=True, search=search or fuzzy, fuzzy=fuzzy,
-                   keys=keys, out=out or sys.stdout, header=header, shortcuts=shortcuts)
+  res = _pick(message, items, True, page_size=page_size, search=search, fuzzy=fuzzy, shortcuts=shortcuts,
+              key_source=key_source, out=out, header=header)
   return None if res is None else res[1]
 
 
@@ -426,7 +431,7 @@ def progress(desc, total=None, *, out=None):
   def draw(frac, spin):
     if frac is None:
       ch = ui.spinner[spin % len(ui.spinner)]
-      line = f"  {style(ch, theme.accent_bright)} {style(desc, 1, theme.accent)}  {style(ui.working, theme.muted)}"
+      line = f"  {style(ch, theme.accent_bright)} {style(desc, 1, theme.accent)}"
     else:
       filled = int(bar_w * max(0.0, min(frac, 1.0)))
       if frac >= 1.0:
@@ -469,16 +474,8 @@ def progress(desc, total=None, *, out=None):
     out.write("\n")
     out.flush()
 
-def status(msg, *, prefix=None, out=None):
-
+def status(msg, *, out=None):
 
   out = out or sys.stdout
-  if prefix is None:
-    prefix = ui.star
-  prefix = prefix.strip()
-  if prefix:
-    p = style(prefix + " ", 1, theme.accent_bright)
-    out.write("  " + p + style(msg, theme.text) + "\n")
-  else:
-    out.write("  " + style(msg, theme.text) + "\n")
+  out.write("  " + style(f"{ui.star} ", 1, theme.accent_bright) + style(msg, theme.text) + "\n")
   out.flush()

@@ -5,7 +5,7 @@ import shutil
 import sys
 import unicodedata
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 RESET = "\x1b[0m"
 
@@ -44,7 +44,6 @@ class ui:
   rule = "─"
   box_border = "╭─╮│╰─╯"
   spinner = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-  working = "Bekerja..."
   selected_n = "dipilih"
   jump_to = "→ Lompat ke:"
   pct = "%"
@@ -62,28 +61,26 @@ def style(text, *codes):
   for c in codes:
     if isinstance(c, int):
       parts.append(f"\x1b[38;5;{c}m" if c >= 100 else f"\x1b[{c}m")
-    else:
-      parts.append(c)
   return f"{''.join(parts)}{text}{RESET}"
 
 def bg(code, text):
 
   return f"\x1b[48;5;{code}m{text}{RESET}"
 
-def grad(text, colors, *, bold=True):
+def grad(text, colors):
 
 
   if not text:
     return ""
   n = len(colors)
   if n == 1:
-    return style(text, 1 if bold else 0, colors[0])
+    return style(text, 1, colors[0])
   parts = []
   span = max(len(text) - 1, 1)
   for i, ch in enumerate(text):
     idx = (i * (n - 1)) // span
     parts.append(f"\x1b[38;5;{colors[idx]}m{ch}")
-  return ("\x1b[1m" if bold else "") + "".join(parts) + RESET
+  return "\x1b[1m" + "".join(parts) + RESET
 
 def sep(width, *, color=None):
 
