@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tuiko"
-version = "0.1.2"
+version = "0.1.3"
 description = "Tiny stdlib-only TUI framework for Python — zero third-party dependencies"
 readme = "README.md"
 license = "MIT"
