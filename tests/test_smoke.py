@@ -72,6 +72,22 @@ class TestKeys(unittest.TestCase):
     self.assertEqual(keys._parse_posix(b"\x1bp"), "alt-p")
     self.assertEqual(keys._parse_posix(b"\x1bq"), "alt-q")
 
+  def test_key_iter_resize_marker(self):
+    # tanpa key, perubahan ukuran terminal → _key_iter yield None (penanda re-render)
+    from unittest import mock
+    import tuiko.widgets as w
+    calls = {"n": 0}
+    def fake_read(timeout=None):
+      calls["n"] += 1
+      return None
+    def fake_width():
+      return 80 if calls["n"] < 3 else 120
+    with mock.patch.object(w, "read_key", fake_read), \
+         mock.patch.object(w, "term_width", fake_width):
+      it = w._key_iter()
+      self.assertIsNone(next(it))  # resize terdeteksi setelah beberapa polling
+      self.assertGreaterEqual(calls["n"], 2)
+
 
 class TestPrompt(unittest.TestCase):
   def test_typing(self):
@@ -116,6 +132,23 @@ class TestSelect(unittest.TestCase):
 
   def test_empty(self):
     self.assertIsNone(select("Pilih:", [], key_source=iter([]), out=io.StringIO()))
+
+  def test_auto_page_size_follows_resize(self):
+    # page_size auto (None) dihitung ulang tiap render: terminal kecil → sedikit
+    # item; setelah resize (key None) → item yang tadinya di luar page ikut tampil.
+    from unittest import mock
+    import tuiko.widgets as w
+    calls = {"n": 0}
+    def fake_height():
+      calls["n"] += 1
+      return 12 if calls["n"] <= 2 else 40  # kecil dulu, lalu gedein
+    out = io.StringIO()
+    items = [f"EP{i:02d}" for i in range(1, 13)]  # 12 item
+    with mock.patch.object(w, "term_height", fake_height):
+      idx = select("Pilih:", items, key_source=iter([None, "enter"]), out=out)
+    self.assertEqual(idx, 0)
+    rendered = out.getvalue()
+    self.assertIn("EP12", rendered)  # setelah resize, item paling bawah tampil
 
 
 class TestShortcuts(unittest.TestCase):

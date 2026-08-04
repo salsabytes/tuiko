@@ -175,8 +175,18 @@ def _auto_page_size(header, search=False):
 
 
 def _key_iter():
+  # Polling key + deteksi resize terminal: ukuran berubah tanpa key → yield None
+  # (loop yang pakai iterator ini mengartikan None sebagai "render ulang").
+  last = (term_width(), term_height())
   while True:
-    yield read_key()
+    k = read_key(timeout=0.15)
+    if k is None:
+      size = (term_width(), term_height())
+      if size != last:
+        last = size
+        yield None
+      continue
+    yield k
 
 def prompt(message, *, default="", hint="", key_source=None, out=None, header=()):
 
@@ -206,6 +216,8 @@ def prompt(message, *, default="", hint="", key_source=None, out=None, header=()
     rows.append(_bottom(w))
     render_frame(rows, out)
     k = next(keys)
+    if k is None:  # resize terminal → re-render dengan ukuran baru
+      continue
     if k == "enter":
       return value
     if k == "escape":
@@ -222,6 +234,7 @@ def prompt(message, *, default="", hint="", key_source=None, out=None, header=()
 
 def _list_loop(message, items, *, page_size, multi, search, fuzzy, keys, out, header=(), shortcuts=None):
 
+  auto = page_size is None
   if page_size is None:
     page_size = _auto_page_size(header, search)
   total = len(items)
@@ -273,6 +286,12 @@ def _list_loop(message, items, *, page_size, multi, search, fuzzy, keys, out, he
 
   while True:
     n = len(visible)
+    if auto:
+      # resize: hitung ulang page size tiap render, clamp scroll ke jangkauan baru
+      page_size = _auto_page_size(header, search)
+      max_start = max(0, n - page_size)
+      pages = max(1, (n + page_size - 1) // page_size)
+      _fit()
     end = min(start + page_size, n)
     w = _card_w()
     rows = [_top(w)]
@@ -306,6 +325,8 @@ def _list_loop(message, items, *, page_size, multi, search, fuzzy, keys, out, he
     render_frame(rows, out)
 
     k = next(keys)
+    if k is None:  # resize terminal → re-render dengan ukuran baru
+      continue
     now = time.time()
     if shortcuts and k in shortcuts:
       return ("shortcut", shortcuts[k])

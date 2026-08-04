@@ -76,17 +76,25 @@ def _parse_posix(seq):
   return _POSIX_SEQ.get(seq, seq.decode(errors="replace"))
 
 
-def read_key():
+def read_key(timeout=None):
 
+  # timeout (detik) → None kalau tidak ada key; None → blocking seperti biasa.
   if os.name == "nt":
     import msvcrt
+    import time
+    if timeout is not None:
+      end = time.monotonic() + timeout
+      while not msvcrt.kbhit():
+        if time.monotonic() >= end:
+          return None
+        time.sleep(0.03)
     ch = msvcrt.getwch()
     if ch in ("\xe0", "\x00"):
       return _parse_win(ch, msvcrt.getwch())
     if ch == "\x1b":
       return _read_win_esc()
     return _normalize_char(ch)
-  return _read_posix()
+  return _read_posix(timeout)
 
 # Parse ESC-prefixed sequences on Windows (VT mode / modern terminals).
 def _read_win_esc():
@@ -105,11 +113,15 @@ def _read_win_esc():
         break
   return _parse_posix(b)
 
-def _read_posix():
+def _read_posix(timeout=None):
 
 
   import select
   fd = sys.stdin.fileno()
+  if timeout is not None:
+    r, _, _ = select.select([fd], [], [], timeout)
+    if not r:
+      return None
   b = os.read(fd, 1)
   if b == b"\x1b":
     r, _, _ = select.select([fd], [], [], 0.05)
