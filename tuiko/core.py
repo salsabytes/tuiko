@@ -151,4 +151,4 @@ def enable_ansi():
     if k32.GetConsoleMode(h, ctypes.byref(mode)):
       k32.SetConsoleMode(h, mode.value | 0x0004)
   except Exception:
-    pass
+    pass  # nosec B110: best-effort VT enable; ignore if not a Windows console

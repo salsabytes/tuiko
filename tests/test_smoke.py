@@ -419,9 +419,9 @@ class TestSearch(unittest.TestCase):
 class TestWideAlign(unittest.TestCase):
   def _frame_widths(self, out):
     rows = []
-    for l in strip_ansi(out.getvalue().split("\x1b[2J")[-1]).splitlines():
-      if l.strip():
-        rows.append(disp_width(l))
+    for line in strip_ansi(out.getvalue().split("\x1b[2J")[-1]).splitlines():
+      if line.strip():
+        rows.append(disp_width(line))
     return rows
 
   def test_emoji_title_row_aligned(self):

@@ -4,6 +4,7 @@ import re
 import sys
 import threading
 import time
+import types
 from contextlib import contextmanager
 
 from .core import bg, disp_width, grad, render_frame, strip_ansi, style, term_height, term_width, theme, truncate, ui
@@ -238,165 +239,195 @@ def prompt(message, *, default="", hint="", key_source=None, out=None, header=()
       value += k
 
 
+def _list_state(page_size, auto, multi, search, fuzzy, items, hint):
+  # All mutable loop state in one namespace → loop body stays flat.
+  return types.SimpleNamespace(
+    page_size=page_size, auto=auto, multi=multi, search=search, fuzzy=fuzzy,
+    items=items,
+    hint=hint, total=len(items), query="", visible=list(range(len(items))),
+    match_map={}, max_start=max(0, len(items) - page_size), start=0, sel=0,
+    checked=set(), digit_buf="", last_digit=0.0,
+    pages=max(1, (len(items) + page_size - 1) // page_size),
+  )
+
+
+def _fit_scroll(st):
+  # clamp start so the selected row stays inside the window
+  if st.sel < st.start:
+    st.start = st.sel
+  elif st.sel > st.start + st.page_size - 1:
+    st.start = st.sel - st.page_size + 1
+  st.start = max(0, min(st.start, st.max_start))
+
+
+def _apply_filter(st):
+  # Filter+rank items into st.visible; reset scroll to the top.
+  q = st.query.strip().lower()
+  if not q:
+    st.visible = list(range(st.total))
+    st.match_map = {}
+  else:
+    scored = []
+    st.match_map = {}
+    for i, it in enumerate(st.items):
+      ranges = _match_ranges(q, it, st.fuzzy)
+      if ranges:
+        # (span, start): tight/complete matches rank first (contiguous
+        # "punch" beats a scattered one); on ties, earlier start wins
+        # (first word beats second word).
+        score = (ranges[-1][1] - ranges[0][0], ranges[0][0]) if st.fuzzy else 0
+        scored.append((score, i))
+        st.match_map[i] = ranges
+    scored.sort(key=lambda t: (t[0], t[1]))
+    st.visible = [i for _, i in scored]
+  st.max_start = max(0, len(st.visible) - st.page_size)
+  st.pages = max(1, (len(st.visible) + st.page_size - 1) // st.page_size)
+  st.start = st.sel = 0
+
+
+def _render_list(st, message, header, out):
+  # Draw one frame from st; recompute page size on resize (auto).
+  n = len(st.visible)
+  if st.auto:
+    st.page_size = _auto_page_size(header, st.search)
+    st.max_start = max(0, n - st.page_size)
+    st.pages = max(1, (n + st.page_size - 1) // st.page_size)
+    _fit_scroll(st)
+  end = min(st.start + st.page_size, n)
+  w = _card_w()
+  rows = [_top(w)]
+  rows += _header_rows(w, header)
+  if st.search and st.query:
+    pill = _pill(f"{n} {ui.search_n}")
+  else:
+    pill = _pill(f"{st.start // st.page_size + 1}/{st.pages}")
+  if st.multi:
+    pill += " " + _pill(f"{len(st.checked)} {ui.selected_n}")
+  rows.append(_title(w, message, pill))
+  if st.search:
+    rows.append(_search_row(w, st.query))
+  rows.append(_rule(w))
+  for i in range(st.start, end):
+    idx = st.visible[i]
+    rows.append(_item_row(w, st.items[idx], selected=(i == st.sel),
+                          checked=(idx in st.checked) if st.multi else None,
+                          ranges=st.match_map.get(idx) if st.search else None))
+  if end - st.start < st.page_size:
+    rows.append(_side("", w))
+  rows.append(_rule(w))
+  hint_line = st.hint
+  if st.digit_buf:
+    hint_line += f"  {ui.jump_to} [{st.digit_buf}]"
+  rows.append(_footer(w, hint_line))
+  rows.append(_bottom(w))
+  render_frame(rows, out)
+
+
+def _search_key(st, key):
+  # Edit the search query. Returns True if the key was consumed.
+  if key == "backspace":
+    if st.query:
+      st.query = st.query[:-1]
+      _apply_filter(st)
+    return True
+  if key == "space":
+    if st.multi:
+      if len(st.visible):
+        idx = st.visible[st.sel]
+        st.checked.discard(idx) if idx in st.checked else st.checked.add(idx)
+    else:
+      st.query += " "
+      _apply_filter(st)
+    return True
+  if len(key) == 1 and key.isprintable():
+    st.query += key
+    _apply_filter(st)
+    return True
+  if key == "escape" and st.query:
+    st.query = ""
+    _apply_filter(st)
+    return True
+  return False
+
+
+def _jump_digit(st, key, now):
+  # 0-9 digit jump (non-search only). Returns True if the key was consumed.
+  if not key.isdigit() or st.search:
+    return False
+  if now - st.last_digit > 1.5:
+    st.digit_buf = ""
+  st.digit_buf += key
+  st.last_digit = now
+  target = int(st.digit_buf) - 1
+  if 0 <= target < st.total:
+    st.sel = target
+    _fit_scroll(st)
+  return True
+
+
+def _nav_key(st, key, multi, search):
+  """Navigation. Returns (action, payload); action: continue/return/quit/raise."""
+  limit = len(st.visible) if search else st.total
+  if key == "up":
+    if st.sel > 0:
+      st.sel -= 1
+      _fit_scroll(st)
+  elif key == "down":
+    if st.sel < limit - 1:
+      st.sel += 1
+      _fit_scroll(st)
+  elif key == "pgup":
+    st.sel = max(st.sel - st.page_size, 0)
+    _fit_scroll(st)
+  elif key == "pgdn":
+    st.sel = min(st.sel + st.page_size, limit - 1)
+    _fit_scroll(st)
+  elif key == "space" and multi and not search:
+    st.checked.discard(st.sel) if st.sel in st.checked else st.checked.add(st.sel)
+  elif key == "enter":
+    if search:
+      if len(st.visible):
+        return ("return", (st.visible[st.sel], st.checked))
+    else:
+      return ("return", (st.sel, st.checked))
+  elif key == "escape":
+    return ("quit", None)
+  elif key == "ctrl-c":
+    return ("raise", KeyboardInterrupt())
+  return ("continue", None)
+
+
 def _list_loop(message, items, *, page_size, multi, search, fuzzy, keys, out, header=(), shortcuts=None):
 
   auto = page_size is None
   if page_size is None:
     page_size = _auto_page_size(header, search)
-  total = len(items)
-  query = ""
-  visible = list(range(total))
-  match_map = {}
-  max_start = max(0, total - page_size)
-  start, sel = 0, 0
-  checked = set()
-  digit_buf, last_digit = "", 0.0
   hint = ui.hint_multiselect if multi else ui.hint_select
   if shortcuts:
     hint += "  ·  " + "  ·  ".join(f"[{k}] {v}" for k, v in shortcuts.items())
-  pages = max(1, (total + page_size - 1) // page_size)
-
-  def _fit():
-
-    nonlocal start
-    if sel < start:
-      start = sel
-    elif sel > start + page_size - 1:
-      start = sel - page_size + 1
-    start = max(0, min(start, max_start))
-
-  def _apply_query():
-
-    nonlocal visible, match_map, max_start, pages, start, sel
-    q = query.strip().lower()
-    if not q:
-      visible = list(range(total))
-      match_map = {}
-    else:
-      scored = []
-      match_map = {}
-      for i, it in enumerate(items):
-        ranges = _match_ranges(q, it, fuzzy)
-        if ranges:
-          # (span, start): tight/complete matches rank first (contiguous
-          # "punch" beats a scattered one); on ties, earlier start wins
-          # (first word beats second word).
-          score = (ranges[-1][1] - ranges[0][0], ranges[0][0]) if fuzzy else 0
-          scored.append((score, i))
-          match_map[i] = ranges
-      scored.sort(key=lambda t: (t[0], t[1]))
-      visible = [i for _, i in scored]
-    max_start = max(0, len(visible) - page_size)
-    pages = max(1, (len(visible) + page_size - 1) // page_size)
-    start, sel = 0, 0
+  st = _list_state(page_size, auto, multi, search, fuzzy, items, hint)
 
   while True:
-    n = len(visible)
-    if auto:
-      # resize: hitung ulang page size tiap render, clamp scroll ke jangkauan baru
-      page_size = _auto_page_size(header, search)
-      max_start = max(0, n - page_size)
-      pages = max(1, (n + page_size - 1) // page_size)
-      _fit()
-    end = min(start + page_size, n)
-    w = _card_w()
-    rows = [_top(w)]
-    rows += _header_rows(w, header)
-    if search and query:
-      pill = _pill(f"{n} {ui.search_n}")
-    else:
-      pill = _pill(f"{start // page_size + 1}/{pages}")
-    if multi:
-      pill += " " + _pill(f"{len(checked)} {ui.selected_n}")
-    rows.append(_title(w, message, pill))
-    if search:
-      rows.append(_search_row(w, query))
-    rows.append(_rule(w))
-    for i in range(start, end):
-      idx = visible[i]
-      rows.append(_item_row(w, items[idx], selected=(i == sel),
-                            checked=(idx in checked) if multi else None,
-                            ranges=match_map.get(idx) if search else None))
-    if end - start < page_size:
-      rows.append(_side("", w))
-    rows.append(_rule(w))
-    hint_line = hint
-    if digit_buf:
-      hint_line += f"  {ui.jump_to} [{digit_buf}]"
-    rows.append(_footer(w, hint_line))
-    rows.append(_bottom(w))
-    render_frame(rows, out)
-
-    k = next(keys)
-    if k is None:  # resize terminal → re-render dengan ukuran baru
+    _render_list(st, message, header, out)
+    key = next(keys)
+    if key is None:  # resize terminal
       continue
     now = time.time()
-    if shortcuts and k in shortcuts:
-      return ("shortcut", shortcuts[k])
-    if search:
-      # search-input keys: edit the query, then re-render
-      if k == "backspace":
-        if query:
-          query = query[:-1]
-          _apply_query()
-        continue
-      if k == "space":
-        if multi:
-          if n:
-            idx = visible[sel]
-            checked.discard(idx) if idx in checked else checked.add(idx)
-        else:
-          query += " "
-          _apply_query()
-        continue
-      if len(k) == 1 and k.isprintable():
-        query += k
-        _apply_query()
-        continue
-      if k == "escape" and query:
-        query = ""
-        _apply_query()
-        continue
-      # everything else (nav/enter/escape/ctrl-c) falls through to the shared handler
-    if k.isdigit() and not search:
-      if now - last_digit > 1.5:
-        digit_buf = ""
-      digit_buf += k
-      last_digit = now
-      target = int(digit_buf) - 1
-      if 0 <= target < total:
-        sel = target
-        _fit()
+    if shortcuts and key in shortcuts:
+      return ("shortcut", shortcuts[key])
+    if st.search and _search_key(st, key):
       continue
-    digit_buf = ""
-    # shared navigation: search bounds by the filtered list, otherwise total
-    limit = n if search else total
-    if k == "up":
-      if sel > 0:
-        sel -= 1
-        _fit()
-    elif k == "down":
-      if sel < limit - 1:
-        sel += 1
-        _fit()
-    elif k == "pgup":
-      sel = max(sel - page_size, 0)
-      _fit()
-    elif k == "pgdn":
-      sel = min(sel + page_size, limit - 1)
-      _fit()
-    elif k == "space" and multi and not search:
-      checked.discard(sel) if sel in checked else checked.add(sel)
-    elif k == "enter":
-      if search:
-        if n:
-          return visible[sel], checked
-      else:
-        return sel, checked
-    elif k == "escape":
+    if _jump_digit(st, key, now):
+      continue
+    st.digit_buf = ""
+    action, payload = _nav_key(st, key, st.multi, st.search)
+    if action == "continue":
+      continue
+    if action == "raise":
+      raise payload
+    if action == "quit":
       return None
-    elif k == "ctrl-c":
-      raise KeyboardInterrupt
+    return payload
 
 def _pick(message, items, multi, *, page_size=None, search=False, fuzzy=False, shortcuts=None, key_source=None, out=None, header=()):
 

@@ -1,5 +1,7 @@
 # Tuiko
 
+[![CodeFactor](https://www.codefactor.io/repository/github/salsabytes/tuiko/badge)](https://www.codefactor.io/repository/github/salsabytes/tuiko/issues/main)
+
 > **Status: work in progress — this project is NOT finished yet.**
 >
 > The API and behavior may change at any time without notice. Do not use it in

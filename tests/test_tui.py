@@ -24,7 +24,7 @@ class TestTuiReal(unittest.TestCase):
         pid, fd = pty.fork()
         if pid == 0:
             os.chdir(ROOT)
-            os.execv(sys.executable, [sys.executable] + argv)
+            os.execv(sys.executable, [sys.executable] + argv)  # nosec B606: spawn the TUI in a pty to test it
         return pid, fd
 
     def _read_until(self, fd, patterns, timeout=8.0):
